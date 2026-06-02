@@ -5,7 +5,7 @@ description: "Use when preparing an MCP server for submission to the Anthropic M
 
 # mcp-directory-readiness
 
-Audits an MCP server against the 7 verified Anthropic MCP Directory submission requirements (source: https://claude.com/docs/connectors/building/submission). Produces a gap list, mechanical auto-fixes where possible, and a pre-filled submission form.
+Audits an MCP server against the 9 verified Anthropic MCP Directory submission requirements (sources: claude.com/docs/connectors/building/submission + support.claude.com Software Directory Policy article; corrected 2026-06-02). Produces a gap list, mechanical auto-fixes where possible, and a pre-filled submission form.
 
 ## When to use
 
@@ -24,7 +24,15 @@ If not in the current working directory, ask once: "What's the path to the MCP s
 
 ### 2. Run the audit
 
-Walk the 7 requirements in `requirements.md`. For each, run the corresponding check from `audit-checklist.md`. The highest-leverage check: **enumerate every tool and verify both `title` AND one of `readOnlyHint|destructiveHint` are present.** This is where 80% of rejections happen.
+Walk the 9 requirements in `requirements.md`. For each, run the corresponding check from `audit-checklist.md`. The highest-leverage checks (in order):
+1. **Tool annotations** — every tool needs `title` AND one of `readOnlyHint|destructiveHint`. ~30% of rejections.
+2. **manifest.json present at v0.2+** with `privacy_policies` array. Newly required as of 2026 — pre-2026 skill versions missed this.
+3. **No stub tools** — README must not advertise "v0.X scaffold, N tools stubbed." Reviewers smoke-test.
+4. **OAuth 2.1 + claude.com callback** — both `claude.ai` AND `claude.com` redirect URIs must be allowlisted.
+
+For each gap, classify as:
+- **Auto-fix (mechanical)**: missing `title`, missing hint annotation, missing `manifest.json`, missing README Privacy Policy section, http:// in config → surface the exact edit
+- **TODO (judgment-call)**: which tools are destructive vs read-only, OAuth scope wording, stub-tool wiring → surface as a question for the user
 
 For each gap, classify as:
 - **Auto-fix (mechanical)**: missing `title`, missing hint annotation, http:// in config → surface the exact edit
@@ -42,9 +50,9 @@ Use `submission-form-template.md`. Pre-fill every field that can be inferred fro
 
 ## Supporting files
 
-- `requirements.md` — the 7 verified requirements with rationale
-- `audit-checklist.md` — concrete grep/file checks per requirement
-- `submission-form-template.md` — pre-fill template
+- `requirements.md` — the 9 verified requirements with rationale (corrected 2026-06-02)
+- `audit-checklist.md` — concrete grep/file/curl checks per requirement, includes pre-submission smoke-test commands
+- `submission-form-template.md` — pre-fill template with manifest.json, privacy-policy, OAuth allowlist fields
 
 ## Output format
 

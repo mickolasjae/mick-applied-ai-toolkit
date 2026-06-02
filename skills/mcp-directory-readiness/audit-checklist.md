@@ -55,14 +55,27 @@ rg -n "http://" --type ts --type js --type json --type py | rg -v "localhost|127
 
 Any production `http://` → **P0 blocker**, auto-fix to `https://`.
 
-## Check 5: Privacy policy (LOCAL only)
+## Check 5: Privacy policy — REQUIRED for ALL servers (corrected 2026-06)
 
-Determine transport:
-- `package.json` has `"bin"` field + stdio transport → LOCAL → privacy policy required
-- Cloudflare Workers / Vercel / Fly / Express on HTTPS → REMOTE → skip
-- Desktop extension (`.dxt` file or `manifest.json` with `desktop-extension`) → LOCAL → privacy policy required
+The pre-2026 policy said "LOCAL only" — that's stale. Current policy requires a privacy policy for any server that handles user data or talks to a remote service (which is essentially all directory submissions).
 
-If LOCAL and no `PRIVACY.md` / `privacy-policy.md` → **P0 blocker**, TODO for user.
+```bash
+# README section
+rg -n -i "^##.*privacy" README.md
+
+# Hosted policy URL
+curl -sI https://<your-domain>/privacy | head -1
+
+# manifest.json's privacy_policies array
+jq -r '.privacy_policies // empty' manifest.json 2>/dev/null
+```
+
+Block list if ANY of these are missing:
+- HTTPS-hosted privacy policy URL returning 200
+- "Privacy Policy" section in README pointing at that URL
+- `privacy_policies` array in manifest.json (≥1 HTTPS URL)
+
+For a Cloudflare/Vercel/Fly remote server pointing at `https://<your-domain>/privacy`, the autofix is the same as the local case — add the section + manifest field. The URL itself doesn't need to be served from the same host as the MCP endpoint.
 
 ## Check 6: `ui/open-link` capability (optional)
 
@@ -71,6 +84,51 @@ rg -n "ui/open-link|openLink|capabilities"
 ```
 
 Only relevant if server returns URLs in tool responses. Surface as a P2 note.
+
+## Check 6.5: manifest.json present at v0.2+ (REQUIRED — corrected 2026-06)
+
+```bash
+# Manifest must exist with manifest_version 0.2 or later
+jq -r '.manifest_version' manifest.json 2>/dev/null
+```
+
+Minimum schema:
+
+```json
+{
+  "manifest_version": "0.2",
+  "name": "<server-slug>",
+  "version": "0.1.0",
+  "description": "<one line>",
+  "homepage": "https://<server-or-docs-url>",
+  "privacy_policies": ["https://<your-domain>/privacy"],
+  "documentation": "https://<docs-url>"
+}
+```
+
+Missing manifest.json OR `manifest_version` < 0.2 → **P0 blocker**, auto-fix with the template above.
+
+## Check 6.6: OAuth 2.1 + claude.com callback allowlist (REQUIRED for authenticated)
+
+```bash
+# Both callbacks must be allowlisted in your OAuth provider's redirect_uris
+# claude.ai and claude.com both call back
+```
+
+Required allowlist (cannot be substituted):
+- `https://claude.ai/api/mcp/auth_callback`
+- `https://claude.com/api/mcp/auth_callback`
+
+Implicit grant must NOT be advertised in `grant_types_supported`. PKCE S256 must be in `code_challenge_methods_supported`.
+
+## Check 6.7: Tools actually wired (REQUIRED — no stubs)
+
+```bash
+# Smoke-test each tool against its backing system. If your README says
+# "v0.X scaffold, N tools stubbed" — STOP. Reviewers will catch this.
+```
+
+Block list if any tool is documented as a stub or returns mock data.
 
 ## Check 7: Submission routing
 
