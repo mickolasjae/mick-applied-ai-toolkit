@@ -1,0 +1,168 @@
+# Drop-in evidence-gated CI workflow.
+# Copy to .github/workflows/evidence-gated.yml and fill in PROD_URL + secrets.
+#
+# Three layers:
+#   1. smoketest  — <30s, every push, blocks if prod is sick
+#   2. e2e        — 2-10 min, runs only if smoke passes
+#   3. verify     — fails the build if claimed mutations have no artifacts
+
+name: evidence-gated
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: evidence-gated-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROD_URL: ${{ vars.PROD_URL }}                 # e.g. https://api.example.com
+  RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  # -------------------------------------------------------------------------
+  # LAYER 1: smoketest. Hard time budget: 30 seconds.
+  # -------------------------------------------------------------------------
+  smoketest:
+    name: smoketest (<30s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: HTTP healthcheck (assert 200 + body shape)
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS --max-time 10 "$PROD_URL/health")
+          echo "$body" | jq -e '.status == "ok"' \
+            || { echo "healthcheck body shape failed: $body"; exit 1; }
+
+      - name: DB connect probe
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_READONLY }}
+        run: |
+          # Replace with psql/mysql/sqlite as appropriate. The point is: a real read.
+          psql "$DATABASE_URL" -c "SELECT 1" -t -A | grep -q "^1$"
+
+      - name: Secret validity (upstream API probe)
+        env:
+          UPSTREAM_API_KEY: ${{ secrets.UPSTREAM_API_KEY }}
+        run: |
+          # Hit a cheap authenticated endpoint. 401 = rotated/dead secret => fail.
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $UPSTREAM_API_KEY" \
+            "https://api.upstream.example.com/v1/whoami")
+          if [ "$status" = "401" ] || [ "$status" = "403" ]; then
+            echo "secret probe failed with $status"
+            exit 1
+          fi
+
+      - name: Build hash echo
+        run: echo "deployed_sha=$(curl -fsS $PROD_URL/version | jq -r .sha)" >> "$GITHUB_OUTPUT"
+
+  # -------------------------------------------------------------------------
+  # LAYER 2: e2e. Only runs if smoke passes.
+  # -------------------------------------------------------------------------
+  e2e:
+    name: e2e (against prod / staging mirror)
+    needs: smoketest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Create artifact directory
+        run: mkdir -p "artifacts/$RUN_ID"
+
+      - name: Run e2e suite (writes artifacts/$RUN_ID/*)
+        env:
+          TARGET_URL: ${{ env.PROD_URL }}
+          TEST_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
+          ARTIFACT_DIR: artifacts/${{ env.RUN_ID }}
+        run: |
+          set -o pipefail
+          npx playwright test --reporter=list 2>&1 | tee build.log
+
+      - name: Upload e2e artifacts (always, even on fail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-${{ env.RUN_ID }}
+          path: artifacts/${{ env.RUN_ID }}/
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ env.RUN_ID }}
+          path: build.log
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # LAYER 3: verify-mutations. The load-bearing gate.
+  # Fails the build if MUTATION_CLAIM lines in build.log don't match the
+  # number of artifact files written under artifacts/$RUN_ID/.
+  # -------------------------------------------------------------------------
+  verify-mutations:
+    name: verify mutation artifacts
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-log-${{ env.RUN_ID }}
+          path: .
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-artifacts-${{ env.RUN_ID }}
+          path: artifacts/${{ env.RUN_ID }}/
+
+      - name: Count claims vs artifacts
+        run: |
+          set -euo pipefail
+          claimed=$(grep -c "^MUTATION_CLAIM" build.log || true)
+          verified=$(find "artifacts/$RUN_ID" -type f \
+            \( -name '*.json' -o -name '*.html' -o -name '*.png' \) | wc -l | tr -d ' ')
+          echo "claimed=$claimed verified=$verified"
+
+          if [ "$claimed" -gt "$verified" ]; then
+            echo "::error::Mutation/artifact mismatch: $claimed claimed, $verified verified"
+            echo "Unverified mutation claims:"
+            grep "^MUTATION_CLAIM" build.log | head -20
+            exit 1
+          fi
+
+      - name: Schema-check each artifact (non-empty, expected fields)
+        run: |
+          set -euo pipefail
+          for f in artifacts/$RUN_ID/*.json; do
+            [ -s "$f" ] || { echo "empty artifact: $f"; exit 1; }
+            # Reject artifacts that are just {"ok":true} — those are agent self-reports.
+            jq -e 'has("response") or has("ack") or has("id") or has("etag")' "$f" \
+              > /dev/null || { echo "artifact missing external proof: $f"; exit 1; }
+          done
+
+  # -------------------------------------------------------------------------
+  # Only let deploys proceed if all three layers passed.
+  # -------------------------------------------------------------------------
+  gate:
+    name: deploy gate
+    needs: [smoketest, e2e, verify-mutations]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - run: echo "All three layers green. Safe to deploy."

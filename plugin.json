@@ -1,0 +1,23 @@
+{
+  "name": "mick-applied-ai-toolkit",
+  "version": "0.1.0",
+  "description": "Four Claude Code skills extracted from shipping production AI products end-to-end with the agentic coding loop. Each skill codifies a discipline that survives contact with paying users.",
+  "author": {
+    "name": "Mick Johnson",
+    "email": "mick.jae.johnson@gmail.com",
+    "url": "https://butterflysecurity.org"
+  },
+  "homepage": "https://github.com/mickolasjae/mick-applied-ai-toolkit",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-skills",
+    "agent-engineering",
+    "anthropic-mcp",
+    "model-context-protocol",
+    "applied-ai",
+    "evidence-gated-ci",
+    "multi-model-routing",
+    "production-ai"
+  ]
+}
