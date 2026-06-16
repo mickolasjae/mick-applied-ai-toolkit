@@ -4,6 +4,18 @@ All notable changes to `mick-applied-ai-toolkit` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-06-15
+
+### Fixed
+- **README invocation syntax** — removed references to a nonexistent `/skill <name>` slash command. This plugin ships no slash commands; skills auto-load via the Skill tool when their description matches the user's natural-language request. README now documents the actual invocation pattern (natural-language triggers listed per skill).
+
+### Added
+- **`examples/` directory** — one runnable example per skill, demonstrating the canonical natural-language trigger and expected output shape:
+  - `examples/mcp-directory-readiness.md`
+  - `examples/anthropic-api-resilience.md`
+  - `examples/evidence-gated-ci.md`
+  - `examples/multi-model-routing.md`
+
 ## [0.1.1] - 2026-06-02
 
 ### Changed
@@ -37,5 +49,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - 8 topics tagged for discoverability: `claude-code`, `claude-skills`, `anthropic-mcp`, `model-context-protocol`, `applied-ai`, `agent-engineering`, `forward-deployed`, `prompt-engineering`
 - Homepage links to https://butterflysecurity.org (author's primary production product)
 
+[0.1.2]: https://github.com/mickolasjae/mick-applied-ai-toolkit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/mickolasjae/mick-applied-ai-toolkit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mickolasjae/mick-applied-ai-toolkit/releases/tag/v0.1.0

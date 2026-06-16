@@ -33,16 +33,16 @@ done
 
 ## Use
 
-Once installed, invoke any skill from Claude Code by name:
+Claude Code skills are auto-loaded once they live under `~/.claude/skills/`. There is **no `/skill` slash command** — Claude invokes the matching skill itself (via the Skill tool) as soon as your prompt fires one of its triggers. So just describe the work in plain English:
 
-```
-/skill mcp-directory-readiness
-/skill anthropic-api-resilience
-/skill evidence-gated-ci
-/skill multi-model-routing
-```
+- "Audit my MCP server for the Anthropic Directory" → fires `mcp-directory-readiness`
+- "I'm getting 429s from the Claude API, add round-robin keys" → fires `anthropic-api-resilience`
+- "Add an evidence-gated CI pre-push gate to this project" → fires `evidence-gated-ci`
+- "Route between Claude and GPT for the cheapest model per task" → fires `multi-model-routing`
 
-Or just describe the work — each skill's frontmatter lists the natural-language triggers ("audit my MCP server", "Claude API rate limit", "add CI to this project", "route between Claude and GPT").
+If you want to force a specific skill, name it explicitly in your prompt — e.g. *"Use the `multi-model-routing` skill to scaffold a router for this app."* The skill's `name:` field in `SKILL.md` is what Claude matches against.
+
+See [`examples/`](examples/) for a runnable scenario per skill (trigger prompt + expected agent behavior).
 
 ## Why these four
 
